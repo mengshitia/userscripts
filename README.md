@@ -2,7 +2,7 @@ Userscripts used in Violentmonkey.
 
 ---
 
-##Youtube videos playback volume fix
+## Youtube videos playback volume fix
 
 Prevent Youtube videos' volume from automatically changing when starting play, unpausing or changing the external volume.
 
