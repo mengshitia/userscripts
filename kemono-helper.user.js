@@ -18,6 +18,7 @@
 // Issue: Some files have the same sha256 checksum, which means they are the same file. Currently just download them all.
 // Issue: Much of the code is duplicated and requires optimization.
 // Plan: Replace "GM_download" with "GM_xmlhttpRequest".
+// Plan: I18n.
 
 // Name of this script, used in notifications.
 const SCRIPT_NAME = GM_info.script.name;
