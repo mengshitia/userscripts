@@ -13,7 +13,7 @@
 // @grant       GM_addStyle
 // @grant       GM_notification
 // @grant       GM_setClipboard
-// @version     1.0
+// @version     1.1
 // ==/UserScript==
 
 'use strict'
@@ -91,6 +91,46 @@ function run() {
             buildDownloadBtn(downloadableContentContainer, postTitle, postUserName)
         }
 
+        /* When the post has at least one picture can be downloaded. */
+        const picturesDonwloadLinks = unsafeWindow.document.querySelectorAll('.post__body>.post__files>.post__thumbnail>figure>.image-link')
+        const thePicturesDownloadBtn = unsafeWindow.document.querySelector('button.kh-btn-download-pictures')
+        /* Only when found contents and no download button was build. */
+        if (picturesDonwloadLinks !== null && picturesDonwloadLinks.length > 0 && thePicturesDownloadBtn === null) {
+            /* Read the infomation about the user and the post. */
+            const _postUserNameNode = unsafeWindow.document.querySelector('a.post__user-name')
+            const postUserName = _postUserNameNode.innerText
+            const _postTitleNode = unsafeWindow.document.querySelector('h1.post__title')
+            const postTitle = _postTitleNode.innerText.replaceAll('/', ',')
+
+            const _btnContainer = unsafeWindow.document.querySelector('.post__body>.post__files')
+
+            let urls = ''
+            for (let i = 0; i < picturesDonwloadLinks.length; i++) {
+                const a = picturesDonwloadLinks[i]
+                const downloadLink = a.href
+                const checksum = extractSHA256Sum(downloadLink)
+                /* Use the index and take out the file extension to be the new name. */
+                let fileName = `${i}.${a.download.split('.')[1]}`
+                fileName = fileName.replaceAll('/', '-')
+                const userName = postUserName
+                const postName = postTitle
+                const url = `\n${downloadLink}\n out=${fileName}\n checksum=sha-256=${checksum}\n dir=${userName}/${postName}\n`
+                urls += url
+            }
+
+            const btn = unsafeWindow.document.createElement('button')
+            btn.title = 'download pictures with aria2'
+            btn.innerText = '⭳ pictures with aria2'
+            btn.className = 'kh-btn-download-pictures'
+            btn.addEventListener('click', function (ev) {
+                GM_setClipboard(urls)
+                ev.target.innerText = '✓ Copied'
+            })
+
+            _btnContainer.prepend(btn)
+
+            g_isPictureBatchBtnBuilt = true
+        }
     }
 
     VM.observe(target, callback)
