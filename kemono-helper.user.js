@@ -15,9 +15,10 @@
 // ==/UserScript==
 
 // Issue: Direct download cannot determine whether a file has been downloaded correctly.
+// Solution: Use callback event object to check the "status" value, if an error occurs, abort the download.
+
 // Issue: Some files have the same sha256 checksum, which means they are the same file. Currently just download them all.
 // Issue: Much of the code is duplicated and requires optimization.
-// Plan: Replace "GM_download" with "GM_xmlhttpRequest".
 // Plan: I18n.
 
 // Name of this script, used in notifications.
@@ -243,7 +244,7 @@ function tryAttachments() {
     GM_notification({
       title: SCRIPT_NAME,
       text: `Downloading ${name}\n(${i+1}/${count})`,
-      tag: 'kh-attachments-download-action',
+      tag: `kh-attachments-download-start-${j}`,
     });
     GM_download({
       url: url,
@@ -346,12 +347,21 @@ function tryFiles() {
     GM_notification({
       title: SCRIPT_NAME,
       text: `Downloading ${name}\n(${j+1}/${count})`,
-      tag: 'kh-files-download-action',
+      tag: `kh-files-download-start-${j}`,
     });
-    GM_download({
+    let downloadControl = GM_download({
       url: url,
       name: name,
-      onload: () => {
+      onload: (ev) => {
+        if (ev.status >= 400) {
+          downloadControl.abort();
+          GM_notification({
+            title: SCRIPT_NAME,
+            text: `${name} was failed: (${ev.status})`,
+            tag: `kh-files-download-abort-${j}`,
+          });
+          return;
+        }
         GM_notification({
           title: SCRIPT_NAME,
           text: `${name} was completed`,
@@ -362,7 +372,7 @@ function tryFiles() {
         GM_notification({
           title: SCRIPT_NAME,
           text: `${name} was failed`,
-          tag: `kh-files-download-success-${j}`,
+          tag: `kh-files-download-fail-${j}`,
         });
       }, // onerror callback
     }); // GM_download()
