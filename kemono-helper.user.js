@@ -115,19 +115,6 @@ function attachAdditionalActionButtonsThenDisconnect(observer) {
     textContent: '🖹Copy links for aria2'
   });
   act1.onclick = copyAttachmentsLinksForAria2;
-  let act2 = GM_addElement(dropdown1, 'button', {
-    id: 'kh-act2',
-    class: 'kh-btn',
-    textContent: '⬇Download all'
-  });
-  // Disable button for 3s when clicked.
-  act2.onclick = (ev) => {
-    ev.target.setAttribute('disabled', true);
-    setTimeout(() => {
-      ev.target.removeAttribute('disabled');
-    }, 3000);
-    tryAttachments();
-  };
 
   let wrapper2 = GM_addElement(actionsNode, 'div', {class: 'kh-wrapper'});
   let action2 = GM_addElement(wrapper2, 'button', {
@@ -216,55 +203,6 @@ function copyAttachmentsLinksForAria2() {
     text: 'Download links of attachments for Aria2 was successfully copied to the clipboard!',
     tag: 'kh-attachments-aria2',
   });
-}
-
-function tryAttachments() {
-  let attachmentsNode = document.querySelector('.post__attachments');
-  if (attachmentsNode === null || !attachmentsNode.hasChildNodes()) {
-    GM_notification({
-      title: SCRIPT_NAME,
-      text: 'No attachments.',
-      tag: 'kh-attachments-download',
-    });
-    return;
-  }
-  let attachments = [];
-  const { userName, postName, publishDate } = getMetaData();
-  const attachmentLinkNodes = document.querySelectorAll('.post__attachment-link');
-  for (const attachmentLinkNode of attachmentLinkNodes) {
-    const url = attachmentLinkNode.href;
-    const fileName = attachmentLinkNode.download;
-    let file = {url, name: `${userName}-[${publishDate}]${postName}-${fileName}`};
-    attachments.push(file);
-  }
-  // Download one by one.
-  const count = attachments.length;
-  for (let i = 0; i < count; i++) {
-    const {url, name} = attachments[i];
-    GM_notification({
-      title: SCRIPT_NAME,
-      text: `Downloading ${name}\n(${i+1}/${count})`,
-      tag: `kh-attachments-download-start-${j}`,
-    });
-    GM_download({
-      url: url,
-      name: name,
-      onload: () => {
-        GM_notification({
-          title: SCRIPT_NAME,
-          text: `${name} was completed`,
-          tag: `kh-attachments-download-success-${i}`,
-        });
-      }, // onload callback
-      onerror: () => {
-        GM_notification({
-          title: SCRIPT_NAME,
-          text: `${name} was failed`,
-          tag: `kh-attachments-download-fail-${i}`,
-        });
-      }, // onerror callback
-    }); // GM_download()
-  } // for loop
 }
 
 // Files:
