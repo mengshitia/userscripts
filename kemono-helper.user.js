@@ -92,10 +92,12 @@ function onUrlChange() {
 }
 
 function attachAdditionalActionButtonsThenDisconnect(observer) {
-  let actionsNode = document.querySelector('.post__actions');
-  if (actionsNode === null) {
+  // Wait until the page actions were loaded.
+  const _targetNode = document.querySelector('.post__actions>dialog');
+  if (_targetNode === null) {
     return;
   }
+  let actionsNode = document.querySelector('.post__actions');
   // Wrap action button and dropdown panel.
   let wrapper1 = GM_addElement(actionsNode, 'div', {class: 'kh-wrapper'});
   let action1 = GM_addElement(wrapper1, 'button', {
