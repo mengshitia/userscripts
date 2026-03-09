@@ -3,7 +3,7 @@
 // @name:zh-CN            kemono 小帮手
 // @namespace             https://github.com/mengshitia/userscripts
 // @description           Make downloading contents easier.
-// @version               1.3a
+// @version               1.3b
 // @match                 https://kemono.*/*
 // @grant                 GM_info
 // @grant                 GM_addElement
@@ -14,18 +14,148 @@
 // @run-at                document-end
 // ==/UserScript==
 
-// Issue: Direct download cannot determine whether a file has been downloaded correctly.
-// Solution: Use callback event object to check the "status" value, if an error occurs, abort the download.
 
-// Issue: Some files have the same sha256 checksum, which means they are the same file. Currently just download them all.
-// Issue: Much of the code is duplicated and requires optimization.
-// Plan: I18n.
+/*****************************************
+ * Script Info.
+ */
+const si = Object.freeze({
+  name: GM_info.script.name,
+}); // End of Script Info.
 
-// Name of this script, used in notifications.
-const SCRIPT_NAME = GM_info.script.name;
+/*****************************************
+ * Common Selectors.
+ */
+const cs = Object.freeze({
+  tweakTarget: '.post__actions>dialog',
+  postActions: '.post__actions',
+  userName: '.post__user-name',
+  postName: '.post__title',
+  publishDate: '.post__published>.timestamp',
+  postAttachments: '.post__attachments',
+  postAttachmentLink: 'a.post__attachment-link',
+  postFiles: '.post__files',
+  postFileLink: 'a.fileThumb',
+  rootContainer: '#root',
+}); // End of Common Selectors.
 
-// *****************************************************************
-// Kemono Helper Elements:
+/*****************************************
+ * Notification Tags.
+ */
+const nt = Object.freeze({
+  copy: 'kh-nt-copy',
+  downloadFail: 'kh-nt-download-fail',
+}); // End of Notification Tags.
+
+
+/*****************************************
+ * Internationalization Keywords.
+ */
+const kw = Object.freeze({
+  cancel: Symbol('cancel'),
+  cancelled: Symbol('cancelled'),
+  clearAll: Symbol('clearAll'),
+  confirm: Symbol('confirm'),
+  copyLinksForAria2: Symbol('copyLinksForAria2'),
+  download: Symbol('download'),
+  downloading: Symbol('downloading'),
+  downloadPanel: Symbol('downloadPanel'),
+  downloadPicturesInThisPost: Symbol('downloadPicturesInThisPost'),
+  errorOccurred: Symbol('errorOccurred'),
+  fileSelection: Symbol('fileSelection'),
+  finished: Symbol('finished'),
+  hideDownloadPanel: Symbol('hideDownloadPanel'),
+  invertSelection: Symbol('invertSelection'),
+  linksHaveBeenCopied: Symbol('linksHaveBeenCopied'),
+  noAttachmentsFound: Symbol('noAttachmentsFound'),
+  noFilesFound: Symbol('noFilesFound'),
+  pending: Symbol('pending'),
+  selectAll: Symbol('selectAll'),
+  started: Symbol('started'),
+  toggleDownloadPanel: Symbol('toggleDownloadPanel'),
+  unknownSize: Symbol('unknownSize'),
+}); // End of Internationalization Keywords.
+
+/*****************************************
+ * Keyword Language Map.
+ */
+const KEYWORD_LANGUAGE_MAP = _buildLanguageMap();
+function _buildLanguageMap() {
+  const map = {
+    'en-US': {},
+    'zh-CN': {},
+  };
+  let _enus = map['en-US'];
+  let _zhcn = map['zh-CN'];
+  // en-US:
+  _enus[kw.cancel] = 'Cancel';
+  _enus[kw.cancelled] = 'Cancelled';
+  _enus[kw.clearAll] = 'Clear All';
+  _enus[kw.confirm] = 'Confirm';
+  _enus[kw.copyLinksForAria2] = 'Copy links for aria2';
+  _enus[kw.download] = 'Download';
+  _enus[kw.downloading] = 'Downloading';
+  _enus[kw.downloadPanel] = 'Download Panel';
+  _enus[kw.downloadPicturesInThisPost] = 'Download pictures in this post';
+  _enus[kw.errorOccurred] = 'Error';
+  _enus[kw.fileSelection] = 'Choose files to download';
+  _enus[kw.finished] = 'Finished';
+  _enus[kw.hideDownloadPanel] = 'Hide the download panel';
+  _enus[kw.invertSelection] = 'Invert';
+  _enus[kw.linksHaveBeenCopied] = 'Links have been copied';
+  _enus[kw.noAttachmentsFound] = 'No attachments found';
+  _enus[kw.noFilesFound] = 'No files found';
+  _enus[kw.pending] = 'Pending';
+  _enus[kw.selectAll] = 'Select All';
+  _enus[kw.started] = 'Started';
+  _enus[kw.toggleDownloadPanel] = 'Toggle the download panel';
+  _enus[kw.unknownSize] = 'Unknown size';
+  // zh-CN:
+  _zhcn[kw.cancel] = '取消';
+  _zhcn[kw.cancelled] = '已取消';
+  _zhcn[kw.clearAll] = '清空';
+  _zhcn[kw.confirm] = '确认';
+  _zhcn[kw.copyLinksForAria2] = '复制 aria2 下载链接';
+  _zhcn[kw.download] = '下载';
+  _zhcn[kw.downloading] = '下载中';
+  _zhcn[kw.downloadPanel] = '下载列表';
+  _zhcn[kw.downloadPicturesInThisPost] = '下载此帖中的图片';
+  _zhcn[kw.errorOccurred] = '发生错误';
+  _zhcn[kw.fileSelection] = '选择要下载的文件';
+  _zhcn[kw.finished] = '已完成';
+  _zhcn[kw.invertSelection] = '反选';
+  _zhcn[kw.hideDownloadPanel] = '隐藏下载列表';
+  _zhcn[kw.linksHaveBeenCopied] = '链接已复制';
+  _zhcn[kw.noAttachmentsFound] = '没有找到任何附件';
+  _zhcn[kw.noFilesFound] = '没有找到任何文件';
+  _zhcn[kw.pending] = '等待中';
+  _zhcn[kw.selectAll] = '全选';
+  _zhcn[kw.started] = '已开始';
+  _zhcn[kw.toggleDownloadPanel] = '展开/折叠下载列表';
+  _zhcn[kw.unknownSize] = '大小未知';
+
+  return Object.freeze(map);
+} // End of function _buildLanguageMap.
+// End of Keyword Language Map.
+
+/*****************************************
+ * Translate a specific keyword.
+ */
+function i18n(keyword) {
+  let preferredLanguage = navigator.language;
+  // Fallback to default language if needed:
+  if (!(preferredLanguage in KEYWORD_LANGUAGE_MAP)) {
+    preferredLanguage = 'en-US';
+  }
+  if (keyword in KEYWORD_LANGUAGE_MAP[preferredLanguage]) {
+    return KEYWORD_LANGUAGE_MAP[preferredLanguage][keyword];
+  }
+  console.warn('%s: Translation of "%s" was not found.', si.name, keyword);
+  return keyword;
+} // End of function i18n.
+
+/*****************************************
+ * class: Kemono Helper Element.
+ */
 class KHE {
   constructor(className, selectorPrefix) {
     this.name = className;
@@ -34,42 +164,66 @@ class KHE {
   toString() {
     return this.selector;
   }
-}
+} // End of class: Kemono Helper Element
 
-const khe = {
+/*****************************************
+ * Kemono Helper Elements.
+ */
+const khe = Object.freeze({
   // Actions:
   actionWrapper: new KHE('kh-action-wrapper', '.'),
   actionButton: new KHE('kh-action-btn', '.'),
   actionPanel: new KHE('kh-action-panel', '.'),
-  // End of Actions.
+  attachmentsActionsPanelToggleButton: new KHE('kh-action-panel-attachments-toggle', '#'),
+  filesActionsPanelToggleButton: new KHE('kh-action-panel-files-toggle', '#'),
   // Download Panel:
   downloadPanelWrapper: new KHE('kh-download-panel-wrapper', '.'),
   downloadPanel: new KHE('kh-download-panel', '#'),
+  downloadPanelToggleButton: new KHE('kh-download-panel-toggle', '#'),
+  downloadPanelHideButton: new KHE('kh-download-pane-hide', '#'),
   downloadPanelHeader: new KHE('kh-download-panel-header', '.'),
-  downlaodPanelHeaderButtonGroup: new KHE('kh-download-panel-header-btn-group', '.'),
-  downlaodPanelHeaderButton: new KHE('kh-download-panel-header-btn', '.'),
   downloadPanelHeaderTitle: new KHE('kh-download-panel-header-title', '.'),
+  downloadPanelHeaderButtonGroup: new KHE('kh-download-panel-header-btn-group', '.'),
+  downloadPanelHeaderButton: new KHE('kh-download-panel-header-btn', '.'),
   downloadPanelBody: new KHE('kh-download-panel-body', '.'),
   downloadPanelFooter: new KHE('kh-download-panel-footer', '.'),
-  // End of Download Panel.
   // Download Item:
   downloadItemsList: new KHE('kh-download-items-list', '.'),
   downloadItem: new KHE('kh-download-item', '.'),
-  downloadItemThumbnailWrapper: new KHE('kh-download-item-thumb-wrapper', '.'),
-  downloadItemThumbnail: new KHE('kh-download-item-thumb', '.'),
   downloadItemInfoWrapper: new KHE('kh-download-item-info-wrapper', '.'),
   downloadItemName: new KHE('kh-download-item-info-name', '.'),
   downloadItemStatusWrapper: new KHE('kh-download-item-status-wrapper', '.'),
   downloadItemStatusProgressBar: new KHE('kh-download-item-status-progress', '.'),
   downloadItemStatusStatistics: new KHE('kh-download-item-status-statistics', '.'),
-  // End of Download Item.
-}
-// End of Kemono Helper Elements.
-// *****************************************************************
+  // File Picker:
+  filePicker: new KHE('kh-file-picker', '.'),
+  filePickerHeader: new KHE('kh-file-picker-header', '.'),
+  filePickerTitle: new KHE('kh-file-picker-title', '.'),
+  filePickerBody: new KHE('kh-file-picker-body', '.'),
+  fileList: new KHE('kh-file-list', '#'),
+  fileListItem: new KHE('kh-file-item', '.'),
+  fileListItemCheckbox: new KHE('kh-file-item-checkbox', '.'),
+  fileListItemLabel: new KHE('kh-file-item-label', '.'),
+  filePickerFooter: new KHE('kh-file-picker-footer', '.'),
+  filePickerActionWrapper: new KHE('kh-file-picker-action-wrapper', '.'),
+  filePickerActionSelectAllButton: new KHE('kh-file-picker-action-select-all-btn', '#'),
+  filePickerActionClearAllButton: new KHE('kh-file-picker-action-clear-all-btn', '#'),
+  filePickerActionInvertSelectionButton: new KHE('kh-file-picker-action-invert-selection-btn', '#'),
+  filePickerActionSubmitButton: new KHE('kh-file-picker-action-submit-btn', '#'),
+  filePickerActionCancelButton: new KHE('kh-file-picker-action-cancel-btn', '#'),
+  // File Thumbnail:
+  fileThumbnailWrapper: new KHE('kh-download-item-thumb-wrapper', '.'),
+  fileThumbnail: new KHE('kh-download-item-thumb', '.'),
+}); // End of Kemono Helper Elements.
 
-// Inject stylesheets:
-const styles = `
-/* Align the footer content to the left. */
+/*****************************************
+ * Customized Styles:
+ */
+GM_addStyle(`
+/*****************************************
+ * Override existing styles:
+ ****************************************/
+/* Move the footer content to the left. */
 footer.global-footer {
   &>dl {
     width: fit-content;
@@ -83,48 +237,47 @@ footer.global-footer {
 .post__actions {
   align-items: baseline;
 }
-/* Styles for the inserted elements. */
-.kh-btn {
-  background-color: transparent;
+/*****************************************
+ * Kemono Helper Elements Styles:
+ ****************************************/
+/** Actions: **/
+${khe.actionButton} {
+  background: none;
   border: none;
-  color: rgb(237, 169, 62);
+  color: var(--color0-primary);
+  padding: 0.25rem;
 
   &:not(:is([disabled])):hover {
-    text-decoration: underline;
+    background-color: var(--color0-tertirary);
   }
-  &:not(:is([disabled])):active {
-    color: rgb(206, 119, 168);
-  }
+
   &:is([disabled]) {
-    background: transparent;
-    color: rgb(110, 110, 110);
+    background: none;
   }
 }
-.kh-dropdown {
-  background-color: rgb(59, 62, 68);
-  border: 1px solid rgb(184, 168, 137);
+${khe.actionPanel} {
+  background-color: var(--color1-secondary);
+  border: 1px solid var(--color0-tertirary);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  font-size: initial;
-  padding: 0.75rem 0.25rem 0.5rem 0.25rem;
+  gap: 0.25rem;
+  font-size: 1.25rem;
+  padding: 0.25rem;
   position: absolute;
-  transition: opacity 400ms, visibility 400ms;
 
-  &>.kh-btn {
+  &.hide {
+    display: none;
+  }
+
+  &>${khe.actionButton} {
     text-align: start;
   }
 }
-.kh-hide {
-  opacity: 0;
-  visibility: hidden;
-}
-/*******************************************************************/
-/* Download Panel: */
+/** Download Panel: **/
 ${khe.downloadPanelWrapper} {
   position: fixed;
   bottom: 2px;
-  left: calc(50% - 350px);
+  left: calc(50% - 17vw);
   /* Prevent the post links crossing the panel on user's page. */
   z-index: 999;
 }
@@ -133,14 +286,14 @@ ${khe.downloadPanel} {
   border: 1px solid var(--color0-tertirary);
   display: flex;
   flex-direction: column;
-  height: 500px;
-  width: 700px;
+  height: 30vh;
+  width: 34vw;
   transition:
   height 200ms,
   width 200ms;
 
   &.collapse {
-    height: 2rem;
+    height: 1.5rem;
     overflow: hidden;
   }
 
@@ -152,15 +305,38 @@ ${khe.downloadPanelHeader} {
   background-color: var(--color1-primary-transparent);
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
+  justify-content: center;
   align-items: baseline;
-  padding: 0.25rem;
+  position: relative;
+  line-height: 1.5;
 }
-${khe.downlaodPanelHeaderButton} {
+${khe.downloadPanelHeaderButtonGroup} {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+}
+${khe.downloadPanelHeaderButton} {
   background: none;
   border: none;
   color: var(--color0-primary);
   cursor: pointer;
+}
+${khe.downloadPanelToggleButton} {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  padding: 0;
+}
+${khe.downloadPanelHideButton} {
+  position: absolute;
+  padding: 0;
+  height: 1.5rem;
+  width: 1.5rem;
+
+  &:hover {
+    background-color: var(--color0-primary);
+    color: var(--color1-primary);
+  }
 }
 ${khe.downloadPanelHeaderTitle} {
   margin: 0;
@@ -173,9 +349,7 @@ ${khe.downloadPanelBody} {
   width: 100%;
   overflow-y: auto;
 }
-/* End of Download Panel. */
-/*******************************************************************/
-/* Download Item: */
+/** Download Item: **/
 ${khe.downloadItemsList} {
   display: flex;
   flex-direction: column;
@@ -195,21 +369,6 @@ ${khe.downloadItem} {
   &.fail {
     background-color: rgb(91, 33, 44);
   }
-}
-${khe.downloadItemThumbnailWrapper} {
-  height: 120px;
-  min-height: 120px;
-  max-height: 120px;
-  width: 120px;
-  min-width: 120px;
-  max-width: 120px;
-  align-content: center;
-  text-align: center;
-}
-${khe.downloadItemThumbnail} {
-  max-height: 100%;
-  max-width: 100%;
-  object-fit: scale-down;
 }
 ${khe.downloadItemInfoWrapper} {
   display: flex;
@@ -233,376 +392,636 @@ ${khe.downloadItemStatusStatistics} {
   margin: 0;
   padding: 0;
 }
-/* End of Download Item. */
-/*******************************************************************/
-`;
-GM_addStyle(styles);
+/** File Picker: **/
+${khe.filePicker}:is([open]) {
+  background-color: var(--color1-primary);
+  border: 2px solid var(--color0-tertirary);
+  color: var(--color0-primary);
+  display: flex;
+  flex-direction: column;
+  height: 33vw;
+  width: 47vw;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0;
 
-onUrlChange();
+  &::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+  }
+}
+${khe.filePickerHeader} {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.5rem;
+}
+${khe.filePickerTitle} {
+  margin: 0;
+  padding: 0;
+}
+${khe.filePickerBody} {
+  padding: 0.5rem;
+  height: 100%;
+  overflow-y: auto;
+}
+${khe.fileList} {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+${khe.fileListItem} {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+}
+${khe.filePickerFooter} {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 0.5rem;
+}
+${khe.filePickerActionWrapper} {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+/** Thumbnail: **/
+${khe.fileThumbnailWrapper} {
+  height: 120px;
+  min-height: 120px;
+  max-height: 120px;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  align-content: center;
+  text-align: center;
+}
+${khe.fileThumbnail} {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: scale-down;
+}
+/* End of Kemono Helper Elements Styles. */
+`); // End of Customized Styles.
 
+
+// *****************************************************************
+// Observing url changes:
+// *****************************************************************
+// For SPA sites, use either "Navigation" or "MutationObserver".
+// "Navitgation": Chrome >= 102, Firefox >= 147.
 if (self.navigation) {
-  // When "navigatesuccess" event fires,
-  // the "location" has not updated.
-  // So use "currententrychange" instead.
+  // Use "currententrychange" instead of "navigatesuccess" event.
   navigation.addEventListener('currententrychange', onUrlChange);
 } else {
   let u = location.href;
-  new MutationObserver(() => u !== (u = location.href) && onUrlChange()).observe(document, { subtree: true, childList: true });
+  const callback = () => u !== (u = location.href) && onUrlChange();
+  const options = { subtree: true, childList: true };
+  new MutationObserver(callback).observe(document, options);
 }
-
+// What to do when the url changes:
 function onUrlChange() {
-  // The url of post looks like this: "/<SOURCE>/user/<UID>/post/<PID>".
-  const re = /^\/\w*\/user\/\d*\/post\/\d*$/
-  if (!re.test(location.pathname)) {
-    return;
+  // Executing tweaks only on matched url.
+  // The location.pathname: "/<WHERE>/user/<UID>/post/<PID>".
+  const re = /^\/.+?\/user\/\d+\/post\/\d+$/;
+  if (re.test(location.pathname)) {
+    const options = { subtree: true, childList: true };
+    new MutationObserver(tweak).observe(document, options);
   }
-  console.log('%s started.', SCRIPT_NAME);
-  // Observe page changes:
-  new MutationObserver((changes, observer) => {
-    attachAdditionalActionButtonsThenDisconnect(observer);
-  }).observe(document, { subtree: true, childList: true });
+}
+// Also when current page was loaded:
+onUrlChange();
+// *****************************************************************
+// End of Observing url changes.
+// *****************************************************************
+
+
+// *****************************************************************
+// Tweaks:
+// *****************************************************************
+function tweak(changes, observer) {
+  // Wait until the target element was created:
+  const targetNode = document.querySelector(cs.tweakTarget);
+  if (targetNode) {
+    // Stop on error.
+    try {
+      console.log('%s: Up and running.', si.name);
+      createAdditionalActions();
+    } catch (e) {
+      console.error('%s: Error occurred.', si.name);
+      throw e;
+    } finally {
+      console.log('%s: Stopped.', si.name);
+      observer.disconnect();
+    }
+  }
 }
 
-function attachAdditionalActionButtonsThenDisconnect(observer) {
-  // Wait until the page actions were loaded.
-  const _targetNode = document.querySelector('.post__actions>dialog');
-  if (_targetNode === null) {
+function createAdditionalActions() {
+  // If actions have been created, quit.
+  const _apb = document.querySelector(khe.attachmentsActionsPanelToggleButton.selector);
+  const _fpb = document.querySelector(khe.filesActionsPanelToggleButton.selector);
+  if (_apb || _fpb) {
     return;
   }
-  let actionsNode = document.querySelector('.post__actions');
-  // Wrap action button and dropdown panel.
-  let wrapper1 = GM_addElement(actionsNode, 'div', { class: 'kh-wrapper' });
-  let action1 = GM_addElement(wrapper1, 'button', {
-    id: 'kh-action1',
-    class: 'kh-btn',
+  const postActions = document.querySelector(cs.postActions);
+  // * Attachments Actions:
+  let attachmentsActionsWrapper = GM_addElement(postActions, 'div', {
+    class: khe.actionWrapper.name,
+  });
+  let attachmentsActionsPanelToggleButton = GM_addElement(attachmentsActionsWrapper, 'button', {
+    class: khe.actionButton.name,
+    id: khe.attachmentsActionsPanelToggleButton.name,
     textContent: '🖿Attachments',
-    title: 'Download post attachments',
   });
-  action1.onclick = () => dropdown1.classList.toggle('kh-hide');
-  let dropdown1 = GM_addElement(wrapper1, 'div', {
-    id: 'kh-dropdown1',
-    class: 'kh-dropdown kh-hide',
+  let attachmentsActionsPanel = GM_addElement(attachmentsActionsWrapper, 'div', {
+    class: `${khe.actionPanel.name} hide`,
   });
-  let act1 = GM_addElement(dropdown1, 'button', {
-    id: 'kh-act1',
-    class: 'kh-btn',
-    textContent: '🖹Copy links for aria2'
+  let copyAttachmentsLinksForAria2ActionButton = GM_addElement(attachmentsActionsPanel, 'button', {
+    class: khe.actionButton.name,
+    textContent: `🖹${i18n(kw.copyLinksForAria2)}`,
   });
-  act1.onclick = copyAttachmentsLinksForAria2;
-
-  let wrapper2 = GM_addElement(actionsNode, 'div', { class: 'kh-wrapper' });
-  let action2 = GM_addElement(wrapper2, 'button', {
-    id: 'kh-action2',
-    class: 'kh-btn',
+  // Events:
+  attachmentsActionsPanelToggleButton.onclick = () => {
+    attachmentsActionsPanel.classList.toggle('hide');
+  };
+  attachmentsActionsPanel.onclick = (ev) => {
+    ev.stopPropagation();
+  };
+  copyAttachmentsLinksForAria2ActionButton.onclick = (ev) => {
+    ev.stopPropagation();
+    attachmentsActionsPanel.classList.toggle('hide', true);
+    let attachments = tryGetPostAttachments();
+    if (attachments.length > 0) {
+      const { userName, postName, publishDate } = tryGetMetadata();
+      let aria2Links = [];
+      for (const a of attachments) {
+        const aria2Link = `\n${a.url}\n out=${a.name}\n checksum=sha-256=${a.checksum}\n dir=${userName}/[${publishDate}]${postName}\n`;
+        aria2Links.push(aria2Link);
+      }
+      const links = aria2Links.join('');
+      GM_setClipboard(links);
+      GM_notification({
+        title: si.name,
+        tag: nt.copy,
+        text: i18n(kw.linksHaveBeenCopied),
+      });
+    } else {
+      GM_notification({
+        title: si.name,
+        tag: nt.copy,
+        text: i18n(kw.noAttachmentsFound),
+      });
+    }
+  };
+  // * End of Attachments Actions.
+  // * Files Actions:
+  let filesActionsWrapper = GM_addElement(postActions, 'div', {
+    class: khe.actionWrapper.name,
+  });
+  let filesActionsPanelToggleButton = GM_addElement(filesActionsWrapper, 'button', {
+    class: khe.actionButton.name,
+    id: khe.filesActionsPanelToggleButton.name,
     textContent: '🖼Files',
-    title: 'Download post files',
   });
-  action2.onclick = () => dropdown2.classList.toggle('kh-hide');
-  let dropdown2 = GM_addElement(wrapper2, 'div', {
-    id: 'kh-dropdown2',
-    class: 'kh-dropdown kh-hide',
+  let filesActionsPanel = GM_addElement(filesActionsWrapper, 'div', {
+    class: `${khe.actionPanel.name} hide`,
   });
-  let act3 = GM_addElement(dropdown2, 'button', {
-    id: 'kh-act3',
-    class: 'kh-btn',
-    textContent: '🖹Copy links for aria2'
+  let copyFilesLinksForAria2ActionButton = GM_addElement(filesActionsPanel, 'button', {
+    class: khe.actionButton.name,
+    textContent: `🖹${i18n(kw.copyLinksForAria2)}`,
   });
-  act3.onclick = copyFilesLinksForAria2;
-  let act4 = GM_addElement(dropdown2, 'button', {
-    id: 'kh-act4',
-    class: 'kh-btn',
-    textContent: '⬇Download all'
+  let downloadFilesActionButton = GM_addElement(filesActionsPanel, 'button', {
+    class: khe.actionButton.name,
+    textContent: `⬇${i18n(kw.download)}`,
+    title: `${i18n(kw.downloadPicturesInThisPost)}`,
   });
-  // Disable button for 3s when clicked.
-  act4.onclick = (ev) => {
-    ev.target.setAttribute('disabled', true);
-    setTimeout(() => {
-      ev.target.removeAttribute('disabled');
-    }, 3000);
-    tryFiles();
+  let testActionButton = GM_addElement(filesActionsPanel, 'button', {
+    class: khe.actionButton.name,
+    textContent: '⚒Tests',
+  });
+  // Events:
+  filesActionsPanelToggleButton.onclick = () => {
+    filesActionsPanel.classList.toggle('hide');
   };
-
-  let act5 = GM_addElement(dropdown2, 'button', {
-    id: 'kh-act5',
-    class: 'kh-btn',
-    textContent: '⚒Build',
-  });
-  act5.onclick = () => {
-    const files = tryGetPostFiles();
+  filesActionsPanel.onclick = (ev) => {
+    ev.stopPropagation();
+  };
+  copyFilesLinksForAria2ActionButton.onclick = (ev) => {
+    ev.stopPropagation();
+    filesActionsPanel.classList.toggle('hide', true);
+    let files = tryGetPostFiles();
     if (files.length > 0) {
-      tryAddDownloadPanel();
-    }
-    const downloadItemWrapper = document.querySelector(khe.downloadItemsList.selector);
-    for (const file of files) {
-      addDownloadItemToWrapperWithFile(downloadItemWrapper, file);
+      const { userName, postName, publishDate } = tryGetMetadata();
+      let aria2Links = [];
+      for (const f of files) {
+        const aria2Link = `\n${f.url}\n out=${f.shortName}\n checksum=sha-256=${f.checksum}\n dir=${userName}/[${publishDate}]${postName}\n`;
+        aria2Links.push(aria2Link);
+      }
+      const links = aria2Links.join('');
+      GM_setClipboard(links);
+      GM_notification({
+        title: si.name,
+        tag: nt.copy,
+        text: i18n(kw.linksHaveBeenCopied),
+      });
+    } else {
+      GM_notification({
+        title: si.name,
+        tag: nt.copy,
+        text: i18n(kw.noFilesFound),
+      });
     }
   };
+  downloadFilesActionButton.onclick = (ev) => {
+    ev.stopPropagation();
+    filesActionsPanel.classList.toggle('hide', true);
+    createOrDisplayFilePicker();
+  };
+  // * End of Files Actions.
+} // End of function createAdditionalActions.
 
-  // All done, disconnect the observer.
-  observer.disconnect();
-}
+function createOrDisplayFilePicker() {
+  let filePicker = document.querySelector(khe.filePicker.selector);
+  if (filePicker) {
+    filePicker.showModal();
+  } else {
+    const container = document.querySelector(cs.postActions);
+    filePicker = GM_addElement(container, 'dialog', {
+      class: khe.filePicker.name,
+    });
+    let filePickerHeader = GM_addElement(filePicker, 'header', {
+      class: khe.filePickerHeader.name,
+    });
+    let filePickerTitle = GM_addElement(filePickerHeader, 'h2', {
+      class: khe.filePickerTitle.name,
+      textContent: i18n(kw.fileSelection),
+    });
+    let filePickerBody = GM_addElement(filePicker, 'div', {
+      class: khe.filePickerBody.name,
+    });
+    let fileList = GM_addElement(filePickerBody, 'div', {
+      class: khe.fileList.name,
+      id: khe.fileList.name,
+    });
+    let filePickerFooter = GM_addElement(filePicker, 'footer', {
+      class: khe.filePickerFooter.name,
+    });
+    let filePickerActionWrapperSelection = GM_addElement(filePickerFooter, 'div', {
+      class: khe.filePickerActionWrapper.name,
+    });
+    let selectAllButton = GM_addElement(filePickerActionWrapperSelection, 'button', {
+      class: khe.actionButton.name,
+      id: khe.filePickerActionSelectAllButton.name,
+      textContent: i18n(kw.selectAll),
+    });
+    let clearAllButton = GM_addElement(filePickerActionWrapperSelection, 'button', {
+      class: khe.actionButton.name,
+      id: khe.filePickerActionClearAllButton.name,
+      textContent: i18n(kw.clearAll),
+    });
+    let invertSelectionButton = GM_addElement(filePickerActionWrapperSelection, 'button', {
+      class: khe.actionButton.name,
+      id: khe.filePickerActionInvertSelectionButton.name,
+      textContent: i18n(kw.invertSelection),
+    });
+    let filePickerActionWrapperSubmitOrCancel = GM_addElement(filePickerFooter, 'div', {
+      class: khe.filePickerActionWrapper.name,
+    });
+    let submitButton = GM_addElement(filePickerActionWrapperSubmitOrCancel, 'button', {
+      class: khe.actionButton.name,
+      id: khe.filePickerActionSubmitButton.name,
+      textContent: i18n(kw.confirm),
+    });
+    let cancelButton = GM_addElement(filePickerActionWrapperSubmitOrCancel, 'button', {
+      class: khe.actionButton.name,
+      id: khe.filePickerActionCancelButton.name,
+      textContent: i18n(kw.cancel),
+    });
+    // Events:
+    filePicker.addEventListener('close', () => {
+      const rv = filePicker.returnValue;
+      if (rv !== '') {
+        createOrDisplayDownloadPanel();
+        let files = JSON.parse(rv);
+        for (const file of files) {
+          downloadFileAndCreateControlItem(file);
+        }
+      }
+    });
+    selectAllButton.onclick = () => {
+      if (fileList.hasChildNodes()) {
+        const checkboxes = document.querySelectorAll(khe.fileListItemCheckbox.selector);
+        for (const cb of checkboxes) {
+          cb.checked = true;
+        }
+      }
+    };
+    clearAllButton.onclick = () => {
+      if (fileList.hasChildNodes()) {
+        const checkboxes = document.querySelectorAll(khe.fileListItemCheckbox.selector);
+        for (const cb of checkboxes) {
+          cb.checked = false;
+        }
+      }
+    };
+    invertSelectionButton.onclick = () => {
+      if (fileList.hasChildNodes()) {
+        const checkboxes = document.querySelectorAll(khe.fileListItemCheckbox.selector);
+        for (const cb of checkboxes) {
+          cb.checked ? cb.checked = false : cb.checked = true;
+        }
+      }
+    };
+    submitButton.onclick = () => {
+      if (fileList.hasChildNodes()) {
+        const files = tryGetPostFiles();
+        let selectedFiles = [];
+        const checkboxNodes = document.querySelectorAll(khe.fileListItemCheckbox.selector);
+        for (let j = 0; j < checkboxNodes.length; j++) {
+          const checkbox = checkboxNodes[j];
+          if (checkbox.checked) {
+            selectedFiles.push(files[j]);
+          }
+        }
+        if (selectedFiles.length > 0) {
+          filePicker.returnValue = JSON.stringify(selectedFiles);
+        }
+      }
+      filePicker.close();
+    };
+    cancelButton.onclick = () => {
+      filePicker.close();
+    };
+    filePicker.showModal();
+  }
+  refreshFileList();
+} // End of function createOrDisplayFilePicker.
 
-function addDownloadItemToWrapperWithFile(downloadItemWrapper, file) {
-  let downloadItem = GM_addElement(downloadItemWrapper, 'div', {
-    id: `kh-download-item-${file.checksum}`,
+function refreshFileList() {
+  const fileList = document.querySelector(khe.fileList.selector);
+  if (fileList) {
+    fileList.innerHTML = '';
+    const files = tryGetPostFiles();
+    if (files.length === 0) {
+      GM_addElement(fileList, 'p', {
+        textContent: i18n(kw.noFilesFound),
+      });
+      return;
+    }
+    for (const f of files) {
+      let fileListItem = GM_addElement(fileList, 'div', {
+        class: khe.fileListItem.name,
+      });
+      let fileListItemThumbnailWrapper = GM_addElement(fileListItem, 'div', {
+        class: khe.fileThumbnailWrapper.name,
+      });
+      let fileListItemThumbnail = GM_addElement(fileListItemThumbnailWrapper, 'img', {
+        class: khe.fileThumbnail.name,
+        src: f.thumbUrl,
+        alt: f.shortName,
+        loading: 'lazy',
+      });
+      let fileListItemLabel = GM_addElement(fileListItem, 'label', {
+        class: khe.fileListItemLabel.name,
+      });
+      let fileListItemCheckbox = GM_addElement(fileListItemLabel, 'input', {
+        class: khe.fileListItemCheckbox.name,
+        id: `${khe.fileListItemCheckbox.name}-${f.checksum}-${f.shortName}`,
+        type: 'checkbox'
+      });
+      let labelText = GM_addElement(fileListItemLabel, 'span', {
+        textContent: f.shortName,
+      });
+      // Events:
+      fileListItemCheckbox.addEventListener('change', () => {
+        fileListItemCheckbox.toggleAttribute('checked');
+      })
+    }
+  }
+} // End of function refreshFileList.
+
+function createOrDisplayDownloadPanel() {
+  const _downloadPanel = document.querySelector(khe.downloadPanel.selector);
+  if (_downloadPanel) {
+    _downloadPanel.classList.toggle('hide', false);
+    _downloadPanel.classList.toggle('collapse', false);
+    return;
+  }
+  const container = document.querySelector(cs.rootContainer);
+  let downloadPanelWrapper = GM_addElement(container, 'div', {
+    class: khe.downloadPanelWrapper.name,
+  });
+  let downloadPanel = GM_addElement(downloadPanelWrapper, 'div', {
+    class: khe.downloadPanel.name,
+    id: khe.downloadPanel.name,
+  });
+  let downloadPanelHeader = GM_addElement(downloadPanel, 'div', {
+    class: khe.downloadPanelHeader.name,
+  });
+  let downloadPanelHeaderTitle = GM_addElement(downloadPanelHeader, 'p', {
+    class: khe.downloadPanelHeaderTitle.name,
+    textContent: i18n(kw.downloadPanel),
+  });
+  let downloadPanelHeaderButtonGroup = GM_addElement(downloadPanelHeader, 'div', {
+    class: khe.downloadPanelHeaderButtonGroup.name,
+  });
+  let downloadPanelToggleButton = GM_addElement(downloadPanelHeaderButtonGroup, 'button', {
+    class: khe.downloadPanelHeaderButton.name,
+    id: khe.downloadPanelToggleButton.name,
+    title: i18n(kw.toggleDownloadPanel),
+  });
+  let downloadPanelHideButton = GM_addElement(downloadPanelHeaderButtonGroup, 'button', {
+    class: khe.downloadPanelHeaderButton.name,
+    id: khe.downloadPanelHideButton.name,
+    textContent: '✖',
+    title: i18n(kw.hideDownloadPanel),
+  });
+  let downloadPanelBody = GM_addElement(downloadPanel, 'div', {
+    class: khe.downloadPanelBody.name,
+  });
+  GM_addElement(downloadPanelBody, 'div', {
+    class: khe.downloadItemsList.name,
+    id: khe.downloadItemsList.name,
+  });
+  // Events:
+  downloadPanelToggleButton.onclick = () => {
+    downloadPanel.classList.toggle('collapse');
+  };
+  downloadPanelHideButton.onclick = () => {
+    downloadPanel.classList.toggle('hide')
+  };
+} // End of function createOrDisplayDownloadPanel.
+
+function downloadFileAndCreateControlItem(file) {
+  const container = document.querySelector(khe.downloadItemsList.selector);
+  let downloadItem = GM_addElement(container, 'div', {
     class: khe.downloadItem.name,
   });
-  let thumbnailWrapper = GM_addElement(downloadItem, 'div', {
-    class: khe.downloadItemThumbnailWrapper.name,
+  let downloadItemThumbnailWrapper = GM_addElement(downloadItem, 'div', {
+    class: khe.fileThumbnailWrapper.name,
   });
-  // Thumbnail:
-  GM_addElement(thumbnailWrapper, 'img', {
-    class: khe.downloadItemThumbnail.name,
+  let downloadItemThumbnail = GM_addElement(downloadItemThumbnailWrapper, 'img', {
+    class: khe.fileThumbnail.name,
     src: file.thumbUrl,
     alt: file.shortName,
     loading: 'lazy',
   });
-  let itemInfoWrapper = GM_addElement(downloadItem, 'div', {
+  let downloadItemInfoWrapper = GM_addElement(downloadItem, 'div', {
     class: khe.downloadItemInfoWrapper.name,
   });
-  // Item Name:
-  GM_addElement(itemInfoWrapper, 'p', {
+  let downloadItemName = GM_addElement(downloadItemInfoWrapper, 'p', {
     class: khe.downloadItemName.name,
     textContent: file.name,
   });
-  let itemStatusWrapper = GM_addElement(itemInfoWrapper, 'div', {
+  let downloadItemStatusWrapper = GM_addElement(downloadItemInfoWrapper, 'div', {
     class: khe.downloadItemStatusWrapper.name,
   });
-  // Progress Bar:
-  let downloadProgress = GM_addElement(itemStatusWrapper, 'progress', {
+  let downloadItemStatusProgressBar = GM_addElement(downloadItemStatusWrapper, 'progress', {
     class: khe.downloadItemStatusProgressBar.name,
   });
-  // Statistics:
-  let downloadStatistics = GM_addElement(itemStatusWrapper, 'p', {
+  let downloadItemStatusStatistics = GM_addElement(downloadItemStatusWrapper, 'p', {
     class: khe.downloadItemStatusStatistics.name,
-    textContent: 'Pending...'
+    textContent: i18n(kw.pending),
   });
-  // Download file:
+  // Download control & events:
   let downloadControl = GM_download({
     url: file.url,
     name: file.name,
-    onabort: (ev) => {
-      downloadProgress.value = 0;
-      downloadStatistics.innerText = 'Cancelled';
+    onabort: () => {
+      downloadItemStatusProgressBar.value = 0;
+      downloadItemStatusStatistics.innerText = i18n(kw.cancelled);
     },
-    onerror: (ev) => {
+    onerror: () => {
       downloadItem.classList.toggle('fail', true);
-      downloadStatistics.innerText = 'Error';
+      downloadItemStatusProgressBar.value = 0;
+      downloadItemStatusStatistics.innerText = i18n(kw.errorOccurred);
     },
     onload: (ev) => {
-      if (ev.status === 200) {
-        // success
+      if (ev.status && ev.status === 200) {
+        if (!ev.lengthComputable) {
+          let loaded = ev.loaded;
+          downloadItemStatusProgressBar.value = loaded;
+          downloadItemStatusProgressBar.max = loaded;
+          downloadItemStatusStatistics.innerText = `${toHumanReadableSize(loaded)}/${toHumanReadableSize(loaded)}`;
+        }
+        let s = downloadItemStatusStatistics.innerText;
+        downloadItemStatusStatistics.innerText = `✓${i18n(kw.finished)} ${s}`;
       } else {
-        // abort
         downloadControl.abort();
         downloadItem.classList.toggle('fail', true);
-        downloadStatistics.innerText = 'Fail';
+        downloadItemStatusProgressBar.value = 0;
+        downloadItemStatusStatistics.innerText = `${i18n(kw.errorOccurred)}: ${ev.status ?? '?'}`;
       }
     },
     onloadstart: (ev) => {
-      downloadProgress.value = 0;
-      downloadStatistics.innerText = 'Starting...';
+      if (ev.lengthComputable) {
+        let loaded = ev.loaded;
+        let total = ev.total;
+        downloadItemStatusStatistics.innerText = `${toHumanReadableSize(loaded)}/${toHumanReadableSize(total)}`;
+      } else {
+        downloadItemStatusStatistics.innerText = i18n(kw.started);
+      }
     },
     onprogress: (ev) => {
       if (ev.lengthComputable) {
         let loaded = ev.loaded;
         let total = ev.total;
-        downloadProgress.value = loaded;
-        downloadProgress.max = total;
-        downloadStatistics.innerText = `${humanReadableSize(loaded)}/${humanReadableSize(total)}`;
+        downloadItemStatusProgressBar.value = loaded;
+        downloadItemStatusProgressBar.max = total;
+        downloadItemStatusStatistics.innerText = `${toHumanReadableSize(loaded)}/${toHumanReadableSize(total)}`;
       } else {
-        // length not computable
-        downloadStatistics.innerText = 'Downloading...';
+        downloadItemStatusStatistics.innerText = i18n(kw.downloading);
       }
     },
-  });
-}
+  }); // End of downloadControl.
+} // End of function downloadFileAndCreateControlItem.
 
-function humanReadableSize(bytes) {
-  let result = bytes;
-  if (bytes < 1024) {
-    return `${result}B`;
-  } else if ((result = bytes >> 10) < 1024) {
-    return `${result}K`;
-  } else if ((result = bytes >> 20) < 1024) {
-    return `${result}M`;
-  } else {
-    result = bytes >> 30;
-    return `${result}G`;
-  }
-}
-
-function tryAddDownloadPanel() {
-  const targetNode = document.querySelector('#root');
-  const _panel = document.querySelector(khe.downloadPanel.selector);
-  if (targetNode === null) {
-    console.error('%s: Could not create download panel, the targetNode is null.', SCRIPT_NAME);
-    return;
-  } else if (_panel) {
-    // The download panel already exists, make it visible.
-    _panel.classList.toggle('hide', false);
-    return;
-  }
-  let downloadPanelWrapper = GM_addElement(targetNode, 'div', {
-    class: khe.downloadPanelWrapper.name,
-  });
-  let downloadPanel = GM_addElement(downloadPanelWrapper, 'div', {
-    id: khe.downloadPanel.name,
-    class: `${khe.downloadPanel.name}`,
-  });
-
-  // Panel header:
-  let downloadPanelHeader = GM_addElement(downloadPanel, 'div', {
-    class: khe.downloadPanelHeader.name,
-  });
-  let downloadPanelHeaderButtonGroup1 = GM_addElement(downloadPanelHeader, 'div', {
-    class: khe.downlaodPanelHeaderButtonGroup.name,
-  });
-  let downloadPanelHideButton = GM_addElement(downloadPanelHeaderButtonGroup1, 'button', {
-    id: `${khe.downlaodPanelHeaderButton}-hide`,
-    class: khe.downlaodPanelHeaderButton.name,
-    textContent: '⛌',
-  });
-  downloadPanelHideButton.onclick = () => {
-    hideDownloadPanel(downloadPanel);
-  }
-  // Panel Title:
-  GM_addElement(downloadPanelHeader, 'p', {
-    class: khe.downloadPanelHeaderTitle.name,
-    textContent: 'Downloads',
-  });
-  let downloadPanelHeaderButtonGroup2 = GM_addElement(downloadPanelHeader, 'div', {
-    class: khe.downlaodPanelHeaderButtonGroup.name,
-  });
-  let downloadPanelToggleButton = GM_addElement(downloadPanelHeaderButtonGroup2, 'button', {
-    id: `${khe.downlaodPanelHeaderButton.name}-toggle`,
-    class: khe.downlaodPanelHeaderButton.name,
-    textContent: '▼',
-  });
-  downloadPanelToggleButton.onclick = (ev) => {
-    toggleDownloadPanel(downloadPanel, ev.target);
-  }
-  // End of panel header.
-
-  let downloadPanelBody = GM_addElement(downloadPanel, 'div', {
-    class: khe.downloadPanelBody.name,
-  });
-  // Download Item Wrapper:
-  GM_addElement(downloadPanelBody, 'div', {
-    id: khe.downloadItemsList.name,
-    class: khe.downloadItemsList.name,
-  });
-}
-
-function hideDownloadPanel(panel) {
-  panel.classList.toggle('hide', true);
-}
-
-function toggleDownloadPanel(panel, toggleButton) {
-  panel.classList.toggle('collapse');
-  if (panel.classList.contains('collapse')) {
-    toggleButton.innerText = '▲';
-  } else {
-    toggleButton.innerText = '▼';
-  }
-}
-
-function getMetaData() {
-  const userName = document.querySelector('.post__user-name').innerText;
-  // The name of the post may contain '/', replace them with '|':
-  const postName = document.querySelector('.post__title').innerText.replaceAll('/', '|');
-  // "2006-01-02" -> "2006.01.02":
-  const publishDate = document.querySelector('.post__published>.timestamp').innerText.replaceAll('-', '.');
-
-  return { userName, postName, publishDate };
-}
-
-// Attachments:
-function copyAttachmentsLinksForAria2() {
-  let attachmentsNode = document.querySelector('.post__attachments');
-  if (attachmentsNode === null || !attachmentsNode.hasChildNodes()) {
-    GM_notification({
-      title: SCRIPT_NAME,
-      text: 'No attachments.',
-      tag: 'kh-attachments-aria2',
-    });
-    return;
-  }
-  let aria2Links = [];
-  const { userName, postName, publishDate } = getMetaData();
-  const attachmentLinkNodes = document.querySelectorAll('a.post__attachment-link');
-  for (const attachmentLinkNode of attachmentLinkNodes) {
-    // A download link looks like:
-    // "https://<HOST>/data/<SUM_HEAD1>/<SUM_HEAD2>/<CHECKSUM>.<MIMETYPE>?f=<NAME_URLENCODED>.<MIMETYPE>"
-    const re = /^(https:\/\/.*\/data\/\w{2}\/\w{2}\/(\w*)\.\w*)\?.*$/;
-    const _matches = attachmentLinkNode.href.match(re);
-    // _matches:
+// ***************************************
+// Utils:
+// ***************************************
+function tryGetMetadata() {
+  const userNameNode = document.querySelector(cs.userName);
+  const postNameNode = document.querySelector(cs.postName);
+  const publishDateNode = document.querySelector(cs.publishDate);
+  // All these nodes above should exist.
+  if (userNameNode && postNameNode && publishDateNode) {
+    // Extract IDs in the url:
+    // location.pathname: "/<WHERE>/user/<UID>/post/<PID>".
+    const re = /^\/.+?\/user\/(\d+)\/post\/(\d+)$/;
+    const m = location.pathname.match(re);
+    // The result of Regexp match:
     // [0]: The whole url
-    // [1]: The download link without params
-    // [2]: The checksum
-    const url = _matches[1];
-    const checksum = _matches[2];
+    // [1]: The user ID
+    // [2]: The post ID
+    let metadata = {
+      uid: m[1],
+      userName: userNameNode.innerText,
+      pid: m[2],
+      // Replace '/' with ','
+      postName: postNameNode.innerText.replaceAll('/', ','),
+      // "2006-01-02" -> "2006.01.02"
+      publishDate: publishDateNode.innerText.replaceAll('-', '.'),
+    };
+    return metadata;
+  } else {
+    console.error('%s: Fail to get metadata. Cannot match selectors:', si.name);
+    !userNameNode && console.error(cs.userName);
+    !postNameNode && console.error(cs.postName);
+    !publishDateNode && console.error(cs.publishDate);
+    throw new Error('Fail to get metadata.');
+  }
+} // End of function tryGetMetadata.
+
+function tryMatchDownloadLink(url) {
+  // A download link looks like:
+  // "https://<HOST>/data/<SUM_HEAD1>/<SUM_HEAD2>/<CHECKSUM>.<MIMETYPE>?f=<NAME_URLENCODED>.<MIMETYPE>"
+  const re = /^(https:\/\/.*\/data\/\w{2}\/\w{2}\/(\w*)\.(\w*))\?.*$/;
+  const m = url.match(re);
+  // A successful match should be:
+  // [0]: The whole url
+  // [1]: The download link without params
+  // [2]: The checksum
+  // [3]: The mimetype
+  if (m && m.length === 4) {
+    const url = m[1];
+    const checksum = m[2];
+    const mimetype = m[3];
+    return { url, checksum, mimetype };
+  } else {
+    console.error('%s: Fail to match %s with %s', si.name, url, re);
+    throw new Error('Fail to match a download link.');
+  }
+} // End of function tryMatchDownloadLink.
+
+function tryGetPostAttachments() {
+  const attachmentsNode = document.querySelector(cs.postAttachments);
+  if (attachmentsNode === null || !attachmentsNode.hasChildNodes()) {
+    return [];
+  }
+  let attachments = [];
+  const attachmentLinkNodes = document.querySelectorAll(cs.postAttachmentLink);
+  for (const node of attachmentLinkNodes) {
+    const { url, checksum, mimetype } = tryMatchDownloadLink(node.href);
     // Though the parameter "f" in the download link indicates the name of the attachment,
     // it was not readable for human, because those non-ASCII characters were encoded.
     // Use the value of "download" attribute as the name instead.
-    const fileName = attachmentLinkNode.download;
-    // Construct link for aria2:
-    const aria2Link = `\n${url}\n out=${fileName}\n checksum=sha-256=${checksum}\n dir=${userName}/[${publishDate}]${postName}\n`;
-    aria2Links.push(aria2Link);
+    const name = node.download;
+    let attachment = {
+      url: url,
+      name: name,
+      checksum: checksum,
+      mimetype: mimetype,
+    };
+    attachments.push(attachment);
   }
-  // Copy links to the clipboard, then pop up a notification.
-  const _links = aria2Links.join('');
-  GM_setClipboard(_links);
-  GM_notification({
-    title: SCRIPT_NAME,
-    text: 'Download links of attachments for Aria2 was successfully copied to the clipboard!',
-    tag: 'kh-attachments-aria2',
-  });
-}
-
-// Files:
-function copyFilesLinksForAria2() {
-  let filesNode = document.querySelector('.post__files');
-  if (filesNode === null || !filesNode.hasChildNodes()) {
-    GM_notification({
-      title: SCRIPT_NAME,
-      text: 'No files.',
-      tag: 'kh-files-aria2',
-    });
-    return;
-  }
-  let aria2Links = [];
-  const { userName, postName, publishDate } = getMetaData();
-  const fileLinkNodes = document.querySelectorAll('a.fileThumb');
-  for (let i = 0; i < fileLinkNodes.length; i++) {
-    const fileLinkNode = fileLinkNodes[i];
-    const re = /^(https:\/\/.*\/data\/\w{2}\/\w{2}\/(\w*)\.(\w*))\?.*$/;
-    const _matches = fileLinkNode.href.match(re);
-    // _matches:
-    // [0]: The whole url
-    // [1]: The download link without params
-    // [2]: The checksum
-    // [3]: The mimetype
-    const url = _matches[1];
-    const checksum = _matches[2];
-    // Because the attribute "download" could be uuid, md5 or something else,
-    // use it as a file name is not helpful for management.
-    // Names such as "1.png", "2.jpg" etc. are good,
-    // since all the files in this post will be saved into a folder named after the name of the post.
-    const fileName = `${i}.${_matches[3]}`;
-    const aria2Link = `\n${url}\n out=${fileName}\n checksum=sha-256=${checksum}\n dir=${userName}/[${publishDate}]${postName}\n`;
-    aria2Links.push(aria2Link);
-  }
-  // Copy links to the clipboard, then pop up a notification.
-  const _links = aria2Links.join('');
-  GM_setClipboard(_links);
-  GM_notification({
-    title: SCRIPT_NAME,
-    text: 'Download links of files for Aria2 was successfully copied to the clipboard!',
-    tag: 'kh-files-aria2',
-  });
-}
-
+  return attachments;
+} // End of function tryGetPostAttachments.
 
 function tryGetPostFiles() {
   let filesNode = document.querySelector('.post__files');
@@ -610,117 +1029,63 @@ function tryGetPostFiles() {
     return [];
   }
   let files = [];
-  const { userName, postName, publishDate } = getMetaData();
+  const { userName, postName, publishDate } = tryGetMetadata();
   const fileLinkNodes = document.querySelectorAll('a.fileThumb');
   for (let i = 0; i < fileLinkNodes.length; i++) {
     const fileLinkNode = fileLinkNodes[i];
     const fileThumbNode = fileLinkNode.children[0];
-    const re = /^(https:\/\/.*\/data\/\w{2}\/\w{2}\/(\w*)\.(\w*))\?.*$/;
-    const matches = fileLinkNode.href.match(re);
-    // _matches:
-    // [0]: The whole url
-    // [1]: The download link without params
-    // [2]: The checksum
-    // [3]: The mimetype
-    const url = matches[1];
-    const checksum = matches[2];
-    // Because the attribute "download" could be uuid, md5 or something else,
+    const { url, checksum, mimetype } = tryMatchDownloadLink(fileLinkNode.href);
+    // Because the "download" attribute of file could be uuid, md5 or an actual name,
     // use it as a file name is not helpful for management.
     // Names such as "1.png", "2.jpg" etc. are good,
     // since all the files in this post will be saved into a folder named after the name of the post.
-    const fileName = `${i}.${matches[3]}`;
+    const fileName = `${i}.${mimetype}`;
     let file = {
       url: url,
       name: `${userName}-[${publishDate}]${postName}-${fileName}`,
       checksum: checksum,
-      mimetype: matches[3],
+      mimetype: mimetype,
       shortName: fileName,
       thumbUrl: fileThumbNode.src,
     };
     files.push(file);
   }
   return files;
-}
+} // End of function tryGetPostFiles.
 
-function tryFiles() {
-  let filesNode = document.querySelector('.post__files');
-  if (filesNode === null || !filesNode.hasChildNodes()) {
-    GM_notification({
-      title: SCRIPT_NAME,
-      text: 'No files.',
-      tag: 'kh-files-download',
-    });
-    return;
+/*****************************************
+ * Convert large bytes to human readable format like 'K', 'M', 'G' etc.
+ */
+function toHumanReadableSize(bytes) {
+  let n = bytes;
+  if (bytes < 1024) {
+    return `${n}B`;
+  } else if (bytes >> 10 < 1024) {
+    n = (bytes / 1024).toFixed(1).replace('.0', '');
+    return `${n}K`;
+  } else if (bytes >> 20 < 1024) {
+    n = (bytes / 2 ** 20).toFixed(1).replace('.0', '');
+    return `${n}M`;
+  } else {
+    n = (bytes / 2 ** 30).toFixed(1).replace('.0', '');
+    return `${n}G`;
   }
-  let files = [];
-  const { userName, postName, publishDate } = getMetaData();
-  const fileLinkNodes = document.querySelectorAll('a.fileThumb');
-  for (let i = 0; i < fileLinkNodes.length; i++) {
-    const fileLinkNode = fileLinkNodes[i];
-    const re = /^(https:\/\/.*\/data\/\w{2}\/\w{2}\/(\w*)\.(\w*))\?.*$/;
-    const _matches = fileLinkNode.href.match(re);
-    // _matches:
-    // [0]: The whole url
-    // [1]: The download link without params
-    // [2]: The checksum
-    // [3]: The mimetype
-    const url = _matches[1];
-    // Because the attribute "download" could be uuid, md5 or something else,
-    // use it as a file name is not helpful for management.
-    // Names such as "1.png", "2.jpg" etc. are good,
-    // since all the files in this post will be saved into a folder named after the name of the post.
-    const fileName = `${i}.${_matches[3]}`;
-    let file = { url, name: `${userName}-[${publishDate}]${postName}-${fileName}` };
-    files.push(file);
-  }
-  const count = files.length;
-  for (let j = 0; j < count; j++) {
-    const { url, name } = files[j];
-    GM_notification({
-      title: SCRIPT_NAME,
-      text: `Downloading ${name}\n(${j + 1}/${count})`,
-      tag: `kh-files-download-start-${j}`,
-    });
-    let downloadControl = GM_download({
-      url: url,
-      name: name,
-      onload: (ev) => {
-        if (ev.status >= 400) {
-          downloadControl.abort();
-          GM_notification({
-            title: SCRIPT_NAME,
-            text: `${name} was failed: (${ev.status})`,
-            tag: `kh-files-download-abort-${j}`,
-          });
-          return;
-        }
-        GM_notification({
-          title: SCRIPT_NAME,
-          text: `${name} was completed`,
-          tag: `kh-files-download-success-${j}`,
-        });
-      }, // onload callback
-      onerror: () => {
-        GM_notification({
-          title: SCRIPT_NAME,
-          text: `${name} was failed`,
-          tag: `kh-files-download-fail-${j}`,
-        });
-      }, // onerror callback
-    }); // GM_download()
-  } // for loop
-}
+} // End of function toHumanReadableSize.
 
-// Hide all displaying dropdown panels when not clicked.
+// Hide all action panels when clicked somewhere in the page.
+// The action panels have "stopPropagation()" to prevent event propagation,
+// so click the panels and their contents will not propagate the click event to here.
 self.addEventListener('click', (ev) => {
-  const wrappers = document.querySelectorAll('.kh-wrapper');
-  if (wrappers && wrappers.length > 0) {
-    for (const wrapper of wrappers) {
-      // Hide the panels only when not clicked inside the wrapper.
-      if (!wrapper.contains(ev.target)) {
-        const dropdown = wrapper.children[1];
-        dropdown.classList.toggle('kh-hide', true);
-      }
+  const actionPanels = document.querySelectorAll(khe.actionPanel.selector);
+  for (const panel of actionPanels) {
+    if (!panel.parentElement.contains(ev.target)) {
+      panel.classList.toggle('hide', true);
     }
   }
 });
+// ***************************************
+// End of Utils.
+// ***************************************
+// *****************************************************************
+// End of Tweaks.
+// *****************************************************************
