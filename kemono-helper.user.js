@@ -756,6 +756,7 @@ function createOrDisplayFilePicker() {
       filePicker.close();
     };
     cancelButton.onclick = () => {
+      filePicker.returnValue = '';
       filePicker.close();
     };
     filePicker.showModal();
