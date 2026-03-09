@@ -3,7 +3,7 @@
 // @name:zh-CN            kemono 小帮手
 // @namespace             https://github.com/mengshitia/userscripts
 // @description           Make downloading contents easier.
-// @version               1.3b
+// @version               1.3b.1
 // @match                 https://kemono.*/*
 // @grant                 GM_info
 // @grant                 GM_addElement
