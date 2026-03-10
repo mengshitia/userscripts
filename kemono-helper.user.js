@@ -3,7 +3,7 @@
 // @name:zh-CN            kemono 小帮手
 // @namespace             https://github.com/mengshitia/userscripts
 // @description           Make downloading contents easier.
-// @version               1.3b.1
+// @version               1.3c
 // @match                 https://kemono.*/*
 // @grant                 GM_info
 // @grant                 GM_addElement
@@ -69,6 +69,7 @@ const kw = Object.freeze({
   noAttachmentsFound: Symbol('noAttachmentsFound'),
   noFilesFound: Symbol('noFilesFound'),
   pending: Symbol('pending'),
+  retry: Symbol('retry'),
   selectAll: Symbol('selectAll'),
   started: Symbol('started'),
   toggleDownloadPanel: Symbol('toggleDownloadPanel'),
@@ -105,6 +106,7 @@ function _buildLanguageMap() {
   _enus[kw.noAttachmentsFound] = 'No attachments found';
   _enus[kw.noFilesFound] = 'No files found';
   _enus[kw.pending] = 'Pending';
+  _enus[kw.retry] = 'Retry';
   _enus[kw.selectAll] = 'Select All';
   _enus[kw.started] = 'Started';
   _enus[kw.toggleDownloadPanel] = 'Toggle the download panel';
@@ -128,6 +130,7 @@ function _buildLanguageMap() {
   _zhcn[kw.noAttachmentsFound] = '没有找到任何附件';
   _zhcn[kw.noFilesFound] = '没有找到任何文件';
   _zhcn[kw.pending] = '等待中';
+  _zhcn[kw.retry] = '重试';
   _zhcn[kw.selectAll] = '全选';
   _zhcn[kw.started] = '已开始';
   _zhcn[kw.toggleDownloadPanel] = '展开/折叠下载列表';
@@ -194,7 +197,9 @@ const khe = Object.freeze({
   downloadItemName: new KHE('kh-download-item-info-name', '.'),
   downloadItemStatusWrapper: new KHE('kh-download-item-status-wrapper', '.'),
   downloadItemStatusProgressBar: new KHE('kh-download-item-status-progress', '.'),
+  downloadItemStatusStatisticsWrapper: new KHE('kh-download-item-status-statistics-wrapper', '.'),
   downloadItemStatusStatistics: new KHE('kh-download-item-status-statistics', '.'),
+  retryDownloadButton: new KHE('kh-retry-download-btn', '.'),
   // File Picker:
   filePicker: new KHE('kh-file-picker', '.'),
   filePickerHeader: new KHE('kh-file-picker-header', '.'),
@@ -387,6 +392,11 @@ ${khe.downloadItemStatusWrapper} {
 }
 ${khe.downloadItemStatusProgressBar} {
   width: 60%;
+}
+${khe.downloadItemStatusStatisticsWrapper} {
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
 }
 ${khe.downloadItemStatusStatistics} {
   margin: 0;
@@ -886,7 +896,10 @@ function downloadFileAndCreateControlItem(file) {
   let downloadItemStatusProgressBar = GM_addElement(downloadItemStatusWrapper, 'progress', {
     class: khe.downloadItemStatusProgressBar.name,
   });
-  let downloadItemStatusStatistics = GM_addElement(downloadItemStatusWrapper, 'p', {
+  let downloadItemStatusStatisticsWrapper = GM_addElement(downloadItemStatusWrapper, 'div', {
+    class: khe.downloadItemStatusStatisticsWrapper.name,
+  });
+  let downloadItemStatusStatistics = GM_addElement(downloadItemStatusStatisticsWrapper, 'p', {
     class: khe.downloadItemStatusStatistics.name,
     textContent: i18n(kw.pending),
   });
@@ -897,11 +910,27 @@ function downloadFileAndCreateControlItem(file) {
     onabort: () => {
       downloadItemStatusProgressBar.value = 0;
       downloadItemStatusStatistics.innerText = i18n(kw.cancelled);
+      let retryDownloadButton = GM_addElement(downloadItemStatusStatisticsWrapper, 'button', {
+        class: khe.retryDownloadButton.name,
+        textContent: i18n(kw.retry),
+      });
+      retryDownloadButton.onclick = () => {
+        downloadFileAndCreateControlItem(file);
+        downloadItem.remove();
+      };
     },
     onerror: () => {
       downloadItem.classList.toggle('fail', true);
       downloadItemStatusProgressBar.value = 0;
       downloadItemStatusStatistics.innerText = i18n(kw.errorOccurred);
+      let retryDownloadButton = GM_addElement(downloadItemStatusStatisticsWrapper, 'button', {
+        class: khe.retryDownloadButton.name,
+        textContent: i18n(kw.retry),
+      });
+      retryDownloadButton.onclick = () => {
+        downloadFileAndCreateControlItem(file);
+        downloadItem.remove();
+      };
     },
     onload: (ev) => {
       if (ev.status && ev.status === 200) {
@@ -918,6 +947,14 @@ function downloadFileAndCreateControlItem(file) {
         downloadItem.classList.toggle('fail', true);
         downloadItemStatusProgressBar.value = 0;
         downloadItemStatusStatistics.innerText = `${i18n(kw.errorOccurred)}: ${ev.status ?? '?'}`;
+        let retryDownloadButton = GM_addElement(downloadItemStatusStatisticsWrapper, 'button', {
+          class: khe.retryDownloadButton.name,
+          textContent: i18n(kw.retry),
+        });
+        retryDownloadButton.onclick = () => {
+          downloadFileAndCreateControlItem(file);
+          downloadItem.remove();
+        };
       }
     },
     onloadstart: (ev) => {
