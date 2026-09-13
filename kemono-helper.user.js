@@ -4,7 +4,8 @@
 // @namespace             https://github.com/mengshitia/userscripts
 // @description           Make downloading contents easier.
 // @version               1.3c
-// @match                 https://kemono.*/*
+// @match                 https://kemono.cr/*
+// @match                 https://pawchive.pw/*
 // @grant                 GM_info
 // @grant                 GM_addElement
 // @grant                 GM_addStyle
@@ -26,16 +27,18 @@ const si = Object.freeze({
  * Common Selectors.
  */
 const cs = Object.freeze({
-  tweakTarget: '.post__actions>dialog',
+  // dialog for kemono, post__fav for pawchive:
+  tweakTarget: ':is(.post__actions>dialog,.post__actions>.post__fav)',
   postActions: '.post__actions',
   userName: '.post__user-name',
   postName: '.post__title',
-  publishDate: '.post__published>.timestamp',
+  publishDate: '.post__published',
   postAttachments: '.post__attachments',
   postAttachmentLink: 'a.post__attachment-link',
   postFiles: '.post__files',
   postFileLink: 'a.fileThumb',
-  rootContainer: '#root',
+  // root for kemono, body with hx-target for pawchive:
+  rootContainer: ':is(#root, body[hx-target="#main"])',
 }); // End of Common Selectors.
 
 /*****************************************
@@ -228,6 +231,10 @@ GM_addStyle(`
 /*****************************************
  * Override existing styles:
  ****************************************/
+/* Allow customized action panels display over elements. */
+.post__header {
+  overflow: visible;
+}
 /* Move the footer content to the left. */
 footer.global-footer {
   &>dl {
@@ -241,6 +248,7 @@ footer.global-footer {
 /* Align inserted elements with existing elements. */
 .post__actions {
   align-items: baseline;
+  display: flex;
 }
 /*****************************************
  * Kemono Helper Elements Styles:
@@ -249,11 +257,11 @@ footer.global-footer {
 ${khe.actionButton} {
   background: none;
   border: none;
-  color: var(--color0-primary);
+  color: var(--color0-primary, var(--colour0-primary));
   padding: 0.25rem;
 
   &:not(:is([disabled])):hover {
-    background-color: var(--color0-tertirary);
+    background-color: var(--color0-tertirary, var(--colour0-tertirary));
   }
 
   &:is([disabled]) {
@@ -261,8 +269,8 @@ ${khe.actionButton} {
   }
 }
 ${khe.actionPanel} {
-  background-color: var(--color1-secondary);
-  border: 1px solid var(--color0-tertirary);
+  background-color: var(--color1-secondary, var(--colour1-secondary));
+  border: 1px solid var(--color0-tertirary, var(--colour0-tertirary));
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -287,8 +295,8 @@ ${khe.downloadPanelWrapper} {
   z-index: 999;
 }
 ${khe.downloadPanel} {
-  background-color: var(--color1-secondary-transparent);
-  border: 1px solid var(--color0-tertirary);
+  background-color: var(--color1-secondary-transparent, var(--colour1-secondary-transparent));
+  border: 1px solid var(--color0-tertirary, var(--colour0-tertirary));
   display: flex;
   flex-direction: column;
   height: 30vh;
@@ -307,7 +315,7 @@ ${khe.downloadPanel} {
   }
 }
 ${khe.downloadPanelHeader} {
-  background-color: var(--color1-primary-transparent);
+  background-color: var(--color1-primary-transparent, var(--colour1-primary-transparent));
   display: flex;
   flex-direction: row;
   justify-content: center;
@@ -323,7 +331,7 @@ ${khe.downloadPanelHeaderButtonGroup} {
 ${khe.downloadPanelHeaderButton} {
   background: none;
   border: none;
-  color: var(--color0-primary);
+  color: var(--color0-primary, var(--colour0-primary));
   cursor: pointer;
 }
 ${khe.downloadPanelToggleButton} {
@@ -339,8 +347,8 @@ ${khe.downloadPanelHideButton} {
   width: 1.5rem;
 
   &:hover {
-    background-color: var(--color0-primary);
-    color: var(--color1-primary);
+    background-color: var(--color0-primary, var(--colour0-primary));
+    color: var(--color1-primary, var(--colour1-primary));
   }
 }
 ${khe.downloadPanelHeaderTitle} {
@@ -348,7 +356,7 @@ ${khe.downloadPanelHeaderTitle} {
   padding: 0;
 }
 ${khe.downloadPanelBody} {
-  background-color: var(--color1-secondary-transparent);
+  background-color: var(--color1-secondary-transparent, var(--colour1-secondary-transparent));
   padding: 0.25rem;
   height: 100%;
   width: 100%;
@@ -361,14 +369,14 @@ ${khe.downloadItemsList} {
   gap: 0.25rem;
 }
 ${khe.downloadItem} {
-  background-color: var(--color1-primary);
+  background-color: var(--color1-primary, var(--colour1-primary));
   display: flex;
   flex-direction: row;
   gap: 0.25rem;
   padding: 0.25rem;
 
   &:hover {
-    background-color: var(--color1-secondary);
+    background-color: var(--color1-secondary, var(--colour1-secondary));
   }
 
   &.fail {
@@ -404,9 +412,9 @@ ${khe.downloadItemStatusStatistics} {
 }
 /** File Picker: **/
 ${khe.filePicker}:is([open]) {
-  background-color: var(--color1-primary);
-  border: 2px solid var(--color0-tertirary);
-  color: var(--color0-primary);
+  background-color: var(--color1-primary, var(--colour1-primary));
+  border: 2px solid var(--color0-tertirary, var(--colour0-tertirary));
+  color: var(--color0-primary, var(--colour0-primary));
   display: flex;
   flex-direction: column;
   height: 33vw;
@@ -1003,8 +1011,8 @@ function tryGetMetadata() {
       pid: m[2],
       // Replace '/' with ','
       postName: postNameNode.innerText.replaceAll('/', ','),
-      // "2006-01-02" -> "2006.01.02"
-      publishDate: publishDateNode.innerText.replaceAll('-', '.'),
+      // "Published: 2026-01-02 xx:xx:xx" -> "2006-01-02" -> "2006.01.02"
+      publishDate: publishDateNode.innerText.match(/\d{4}-\d{2}-\d{2}/)[0].replaceAll('-', '.'),
     };
     return metadata;
   } else {
