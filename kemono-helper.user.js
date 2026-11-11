@@ -1027,7 +1027,8 @@ function tryGetMetadata() {
 function tryMatchDownloadLink(url) {
   // A download link looks like:
   // "https://<HOST>/data/<SUM_HEAD1>/<SUM_HEAD2>/<CHECKSUM>.<MIMETYPE>?f=<NAME_URLENCODED>.<MIMETYPE>"
-  const re = /^(https:\/\/.*\/data\/\w{2}\/\w{2}\/(\w*)\.(\w*))\?.*$/;
+  // Wierd SUM_HEAD1 on pawchive.pw has 3 digits, \w{2} -> \w{2,3} to fix this.
+  const re = /^(https:\/\/.*\/data\/\w{2,3}\/\w{2}\/(\w*)\.(\w*))\?.*$/;
   const m = url.match(re);
   // A successful match should be:
   // [0]: The whole url
